@@ -1,120 +1,58 @@
 import streamlit as st
 import requests
-import random
 import time
 
-st.set_page_config(page_title="Cloudflare Bot Traffic Simulator", layout="wide")
-st.title("🤖 Mini Bot Traffic Simulator (Cloudflare Demo)")
-st.caption("Simulación ética y controlada de tráfico para demostrar Bot Management. Solo usar con dominios propios.")
+st.title("🛡️ CloudDefender – Bot Traffic Simulator")
+st.write("Envía tráfico controlado hacia Cloudflare para mostrar detecciones de bots.")
 
-st.markdown("---")
-st.subheader("1. URL autorizada")
+url = st.text_input("URL objetivo (ruta especial recomendada: /__clouddefender_test__):")
 
-target_url = st.text_input(
-    "URL del test (ej: https://lab.tudominio.com/bot-test)",
-    ""
-)
+traffic_type = st.selectbox("Tipo de tráfico", [
+    "Basic Bot",
+    "Burst Bot",
+    "JA3 Randomizer",
+    "Suspicious Header Bot"
+])
 
-st.warning("⚠️ Usa solo dominios que controles tú.")
+count = st.slider("Número de requests", 1, 50, 5)
 
-if not target_url:
-    st.stop()
+start_btn = st.button("Enviar tráfico")
 
-st.markdown("---")
-st.subheader("2. Tipo de tráfico a simular")
+def send_request(i):
+    headers = {
+        "X-CloudDefender-Test": "true",
+        "X-CD-Demo": "CLOUDDEFENDER TEST",
+        "CF-CD-Demo": "CLOUDDEFENDER-TEST",
+        "User-Agent": "Python-requests/2.31.0",
+    }
 
-traffic_type = st.selectbox(
-    "Tipo de tráfico",
-    [
-        "Basic Bot (script-like)",
-        "Medium Bot (headless-like)",
-        "Human Simulated (real browser)",
-        "Controlled Burst",
-    ]
-)
+    # Variante JA3 falsa
+    if traffic_type == "JA3 Randomizer":
+        headers["User-Agent"] = f"Bot/{i}.0"
+        headers["X-JA3-Fake"] = f"ja3-{i}"
 
-count = st.slider(
-    "Número de requests",
-    min_value=1,
-    max_value=20,
-    value=5
-)
+    # Variante encabezados sospechosos
+    if traffic_type == "Suspicious Header Bot":
+        headers["X-Forwarded-For"] = f"185.66.75.{50+i}"
+        headers["X-Origin"] = "botnet"
 
-run = st.button("🚀 Enviar simulación")
-
-# --- User-Agent presets ---
-UA_BASIC_BOT = "Python-requests/2.31.0"
-UA_HEADLESS = "Mozilla/5.0 (X11; Linux x86_64) HeadlessChrome"
-UA_HUMAN = [
-    "Mozilla/5.0 (Windows NT 10.0; Win64; x64) Chrome/121.0",
-    "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) Safari/605.1.15",
-    "Mozilla/5.0 (iPhone; CPU iPhone OS 16_1)"
-]
-
-def send_request(url, headers):
     try:
-        r = requests.get(url, headers=headers, timeout=5)
-        return r.status_code
-    except:
-        return "error"
+        r = requests.get(url, headers=headers, timeout=3)
+        return {"req": i, "status": r.status_code}
+    except Exception as e:
+        return {"req": i, "status": "error", "detail": str(e)}
 
+if start_btn:
+    if not url:
+        st.error("Ingresa una URL válida.")
+        st.stop()
 
-if run:
-    st.markdown("### 🚦 Enviando tráfico…")
+    st.write("📡 Enviando tráfico…")
 
-    logs = []
-
-    for i in range(count):
-
-        # -----------------------------------------
-        # Marca visible para el cliente:
-        # CLOUDDEFENDER TEST
-        # -----------------------------------------
-
-        base_headers = {
-            "X-CloudDefender-Test": "true",
-            "X-CD-Demo": "CLOUDDEFENDER TEST",
-            "CF-CD-Demo": "CLOUDDEFENDER-TEST"
-        }
-
-        if traffic_type == "Basic Bot (script-like)":
-            headers = {**base_headers, "User-Agent": UA_BASIC_BOT}
-
-        elif traffic_type == "Medium Bot (headless-like)":
-            headers = {
-                **base_headers,
-                "User-Agent": UA_HEADLESS,
-                "X-Headless-Sim": "1"
-            }
-
-        elif traffic_type == "Human Simulated (real browser)":
-            headers = {
-                **base_headers,
-                "User-Agent": random.choice(UA_HUMAN)
-            }
-
-        elif traffic_type == "Controlled Burst":
-            headers = {
-                **base_headers,
-                "User-Agent": UA_BASIC_BOT,
-                "X-Burst-Demo": str(random.randint(1000, 9999))
-            }
-
-        status = send_request(target_url, headers)
-        logs.append({
-            "request": i + 1,
-            "headers_sent": headers,
-            "status": status
-        })
-
-        time.sleep(0.3)
+    out = []
+    for i in range(1, count + 1):
+        out.append(send_request(i))
+        time.sleep(0.25)
 
     st.success("Simulación completada.")
-    st.json(logs)
-
-    st.info("""
-    En Cloudflare (Logs, Security o Bots) podrás ver:
-    - Los headers: X-CloudDefender-Test, X-CD-Demo
-    - El User-Agent modificado
-    - El score de Bot Management
-    """)
+    st.json(out)
